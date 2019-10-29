@@ -500,7 +500,7 @@ ROP_FBXUtil::getFinalTransforms(
 }
 /********************************************************************************************************/
 bool
-ROP_FBXUtil::getPostRotateAdjust(const UT_String &node_type, FbxVector4 &post_rotate)
+ROP_FBXUtil::getPostRotateAdjust(const UT_StringRef &node_type, FbxVector4 &post_rotate)
 {
     // For lights/cameras, they have a look at axis that is different from Houdini/Maya that use
     // the -Z axis. To compensate, we multiply in a post rotation so that we go from Houdini's -Z
@@ -853,7 +853,7 @@ ROP_FBXUtil::isJointNullNode(OP_Node* null_node)
     if(!null_node)
 	return false;
 
-    UT_String node_type = null_node->getOperator()->getName();
+    UT_StringHolder node_type = null_node->getOperator()->getName();
     if(node_type != "null")
 	return false;
 
@@ -887,7 +887,7 @@ ROP_FBXUtil::isDummyBone(OP_Node* bone_node)
     if(!bone_node)
 	return false;
 
-    UT_String node_type = bone_node->getOperator()->getName();
+    UT_StringHolder node_type = bone_node->getOperator()->getName();
     if(node_type != "bone")
 	return false;
 
@@ -961,7 +961,7 @@ ROP_FBXUtil::isLODGroupNullNode(OP_Node* null_node)
     if (!null_node)
 	return false;
 
-    UT_String node_type = null_node->getOperator()->getName();
+    UT_StringHolder node_type = null_node->getOperator()->getName();
     if (node_type != "null")
 	return false;
 
@@ -1008,7 +1008,8 @@ ROP_FBXUtil::outputCustomProperties(OP_Node* node, FbxNode* fbx_node)
 	// Imported fbx params have their token starting with "fbx_"
 	UT_String param_token;
 	parm->getToken(param_token);
-	if (!param_token.startsWith("fbx_"))
+	const bool is_animated = param_token.startsWith("fbxa_");
+	if (!param_token.startsWith("fbx_") && !is_animated)
 	    continue;
 
 	// Deduce the corresponding FbxType from the param type
@@ -1021,8 +1022,8 @@ ROP_FBXUtil::outputCustomProperties(OP_Node* node, FbxNode* fbx_node)
 	{
 	    if (parm_type.getFloatType() == PRM_Type::PRM_FLOAT_INTEGER)
 		fbx_prop_type = eFbxInt;
-	    else if (parm_type.getFloatType() == PRM_Type::PRM_FLOAT_RGBA)
-		fbx_prop_type = eFbxDouble3;
+	 //   else if (parm_type.getFloatType() == PRM_Type::PRM_FLOAT_RGBA)
+		//fbx_prop_type = eFbxDouble3;
 	    else
 	    {
 		if (parm->getVectorSize() == 3)
@@ -1045,6 +1046,8 @@ ROP_FBXUtil::outputCustomProperties(OP_Node* node, FbxNode* fbx_node)
 	    FbxBool prop_val = val == 1 ? true : false;
 	    curr_prop.Set(prop_val);
 	    curr_prop.ModifyFlag(FbxPropertyFlags::eUserDefined, true);
+		if (is_animated)
+			curr_prop.ModifyFlag(FbxPropertyFlags::eAnimatable, true);
 	}
 	else if (fbx_prop_type == eFbxFloat)
 	{
@@ -1057,11 +1060,16 @@ ROP_FBXUtil::outputCustomProperties(OP_Node* node, FbxNode* fbx_node)
 
 	    curr_prop.Set(prop_val);
 	    curr_prop.ModifyFlag(FbxPropertyFlags::eUserDefined, true);
+		if (is_animated)
+			curr_prop.ModifyFlag(FbxPropertyFlags::eAnimatable, true);
 	}
 	else if (fbx_prop_type == eFbxDouble4)
 	{
 	    // 4-vector property.(eFbxDouble4)
-	    FbxProperty curr_prop = FbxProperty::Create(fbx_node, FbxDouble4DT, parm->getLabel(), parm->getLabel());
+		FbxDataType data_type = FbxDouble4DT;
+		if (parm_type.getFloatType() == PRM_Type::PRM_FLOAT_RGBA)
+			data_type = FbxColor4DT;
+	    FbxProperty curr_prop = FbxProperty::Create(fbx_node, data_type, parm->getLabel(), parm->getLabel());
 
 	    fpreal val, val1, val2, val3;
 	    parm->getValue(0, val, 0, SYSgetSTID());
@@ -1077,6 +1085,8 @@ ROP_FBXUtil::outputCustomProperties(OP_Node* node, FbxNode* fbx_node)
 
 	    curr_prop.Set(prop_val);
 	    curr_prop.ModifyFlag(FbxPropertyFlags::eUserDefined, true);
+		if (is_animated)
+			curr_prop.ModifyFlag(FbxPropertyFlags::eAnimatable, true);
 	}
 	else if (fbx_prop_type == eFbxInt)
 	{
@@ -1089,11 +1099,16 @@ ROP_FBXUtil::outputCustomProperties(OP_Node* node, FbxNode* fbx_node)
 
 	    curr_prop.Set(prop_val);
 	    curr_prop.ModifyFlag(FbxPropertyFlags::eUserDefined, true);
+		if (is_animated)
+			curr_prop.ModifyFlag(FbxPropertyFlags::eAnimatable, true);
 	}
 	else if (fbx_prop_type == eFbxDouble3 )
 	{
 	    // 3-vector property (fbx_prop_type == eFbxDouble3)
-	    FbxProperty curr_prop = FbxProperty::Create(fbx_node, FbxDouble3DT, parm->getLabel(), parm->getLabel());
+		FbxDataType data_type = FbxDouble3DT;
+		if (parm_type.getFloatType() == PRM_Type::PRM_FLOAT_RGBA)
+			data_type = FbxColor3DT;
+		FbxProperty curr_prop = FbxProperty::Create(fbx_node, data_type, parm->getLabel(), parm->getLabel());
 
 	    fpreal val, val1, val2;
 	    parm->getValue(0, val, 0, SYSgetSTID());
@@ -1107,6 +1122,8 @@ ROP_FBXUtil::outputCustomProperties(OP_Node* node, FbxNode* fbx_node)
 
 	    curr_prop.Set(prop_val);
 	    curr_prop.ModifyFlag(FbxPropertyFlags::eUserDefined, true);
+		if (is_animated)
+			curr_prop.ModifyFlag(FbxPropertyFlags::eAnimatable, true);
 	}
 	else if ( fbx_prop_type == eFbxString )
 	{
@@ -1119,6 +1136,8 @@ ROP_FBXUtil::outputCustomProperties(OP_Node* node, FbxNode* fbx_node)
 	    FbxString prop_val(val.c_str());
 	    curr_prop.Set(prop_val);
 	    curr_prop.ModifyFlag(FbxPropertyFlags::eUserDefined, true);
+		if (is_animated)
+			curr_prop.ModifyFlag(FbxPropertyFlags::eAnimatable, true);
 	}
 	/*
 	else if ( parm_type == PRM_CHOICELIST_SINGLE )

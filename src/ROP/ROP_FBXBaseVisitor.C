@@ -38,6 +38,8 @@
 #include <OP/OP_SubnetIndirectInput.h>
 #include <OBJ/OBJ_Node.h>
 
+#include <UT/UT_StringHolder.h>
+
 #define NEEDED_INDEX_IS_INTERNAL_NODE	    -2
 #define NEEDED_INDEX_UNDEFINED		    -1
 
@@ -451,7 +453,7 @@ ROP_FBXBaseVisitor::isNetworkVisitable(OP_Node* node)
 
     // Check if the network type is black-listed.
     // Excluded types: dopnet, ropnet, chopnet, popnet, shopnet, vopnet
-    UT_String type_name = node->getOperator()->getName();
+    UT_StringHolder type_name = node->getOperator()->getName();
     string string_type(type_name);
     int curr_id, num_ids = myNetworkTypesNotToVisit.size();
     for(curr_id = 0; curr_id < num_ids; curr_id++)

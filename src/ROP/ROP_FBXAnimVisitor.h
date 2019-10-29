@@ -89,6 +89,8 @@ protected:
     void exportChannel(FbxAnimCurve* fbx_anim_curve, OP_Node* source_node, const char* parm_name, int parm_idx, double scale_factor = 1.0, const int& param_inst = -1);
     void outputResampled(FbxAnimCurve* fbx_curve, CH_Channel *ch, int start_array_idx, int end_array_idx, UT_FprealArray& time_array, bool do_insert, PRM_Parm* direct_eval_parm, int parm_idx, double scale_factor = 1.0);
 
+	void outputCustomChannels(OP_Node* node, FbxNode* fbx_node);
+
     bool outputVertexCache(FbxNode* fbx_node, OP_Node* geo_node, const char* file_name, ROP_FBXBaseNodeVisitInfo* node_info_in, ROP_FBXNodeInfo* node_pair_info);
     FbxVertexCacheDeformer* addedVertexCacheDeformerToNode(FbxNode* fbx_node, const char* file_name);
     bool fillVertexArray(OP_Node* node, fpreal time, ROP_FBXBaseNodeVisitInfo* node_info_in, double* vert_array, int num_array_points, ROP_FBXNodeInfo* node_pair_info, fpreal frame_num);

@@ -29,6 +29,8 @@
  *
  */
 
+#include <algorithm>
+
 #include "ROP_FBXHeaderWrapper.h"
 #include "ROP_FBXAnimVisitor.h"
 
@@ -69,6 +71,8 @@
 #include <SYS/SYS_SequentialThreadIndex.h>
 #include <SYS/SYS_StaticAssert.h>
 #include <SYS/SYS_TypeTraits.h>
+
+#include <UT/UT_StringHolder.h>
 
 
 #ifdef UT_DEBUG
@@ -159,12 +163,15 @@ ROP_FBXAnimVisitor::visit(OP_Node* node, ROP_FBXBaseNodeVisitInfo* node_info_in)
 	    continue;
 	res_type = stored_node_info_ptr->getVisitResultType();
 
+	FbxNode *fbx_node = stored_node_info_ptr->getFbxNode();
+
+	outputCustomChannels(node, fbx_node);
+
 	// Skip non-objects, because we can't get transforms for them anyways
 	OBJ_Node* obj_node = is_sop_export ? node->getParent()->castToOBJNode() : node->castToOBJNode();
 	if ( !obj_node )
 	    continue;
 
-	FbxNode *fbx_node = stored_node_info_ptr->getFbxNode();
 	node_info_in->setMaxObjectPoints(stored_node_info_ptr->getMaxObjectPoints());
 	node_info_in->setVertexCacheMethod(stored_node_info_ptr->getVertexCacheMethod());
 	node_info_in->setIsSurfacesOnly(stored_node_info_ptr->getIsSurfacesOnly());
@@ -179,7 +186,7 @@ ROP_FBXAnimVisitor::visit(OP_Node* node, ROP_FBXBaseNodeVisitInfo* node_info_in)
 	    exportResampledAnimation(myAnimLayer, node, fbx_node, node_info_in);
 
 	FbxAnimCurve* curr_anim_curve;
-	UT_String node_type = node->getOperator()->getName();
+	UT_StringHolder node_type = node->getOperator()->getName();
 	if ( is_sop_export )
 	    node_type = "geo";
 
@@ -277,6 +284,79 @@ ROP_FBXAnimVisitor::visit(OP_Node* node, ROP_FBXBaseNodeVisitInfo* node_info_in)
 
     return res_type;
 }
+void
+ROP_FBXAnimVisitor::outputCustomChannels(OP_Node* node, FbxNode* fbx_node)
+{
+	if (!node || !fbx_node)
+		return;
+
+	const char* standard_channel_names[] = {
+		FBXSDK_CURVENODE_COMPONENT_X,
+		FBXSDK_CURVENODE_COMPONENT_Y,
+		FBXSDK_CURVENODE_COMPONENT_Z,
+		"W"
+	};
+	const char* color_channel_names[] = {
+		FBXSDK_CURVENODE_COLOR_RED,
+		FBXSDK_CURVENODE_COLOR_GREEN,
+		FBXSDK_CURVENODE_COLOR_BLUE,
+		"W"
+	};
+
+	// Custom attributes are stored on import as spare param
+	int numparms = node->getParmList()->getEntries();
+	for (int n = 0; n < numparms; n++)
+	{
+		PRM_Parm *parm = node->getParmList()->getParmPtr(n);
+		if (!parm)
+			continue;
+
+		// Only export spare parameters
+		if (!parm->isSpareParm())
+			continue;
+
+		// Make sure the parameter is visible
+		PRM_Type parm_type = parm->getType();
+		if (!parm_type.isVisible())
+			continue;
+
+		// Imported fbx params have their token starting with "fbx_"
+		UT_String param_token;
+		parm->getToken(param_token);
+		if (!param_token.startsWith("fbxa_"))
+			continue;
+
+		FbxProperty prop = fbx_node->FindProperty(parm->getLabel());
+		if (prop.IsValid())
+		{
+			const size_t channel_count = parm->getVectorSize();
+			if (channel_count > 1)
+			{
+				const PRM_Type& parm_type = parm->getType();
+				const bool is_color = (parm_type.isFloatType() && parm_type.getFloatType() == PRM_Type::PRM_FLOAT_RGBA);
+				for (int c = 0; c < channel_count; ++c)
+				{
+					const char* channel_name;
+					if (is_color)
+					{
+						channel_name = color_channel_names[c];
+					}
+					else
+					{
+						channel_name = standard_channel_names[c];
+					}
+					FbxAnimCurve* anim_curve = prop.GetCurve(myAnimLayer, channel_name, true);
+					exportChannel(anim_curve, node, param_token.c_str(), c);
+				}
+			}
+			else
+			{
+				FbxAnimCurve* anim_curve = prop.GetCurve(myAnimLayer, NULL, true);
+				exportChannel(anim_curve, node, param_token.c_str(), 0);
+			}
+		}
+	}
+}
 /********************************************************************************************************/
 void 
 ROP_FBXAnimVisitor::exportTRSAnimation(OP_Node* node, FbxAnimLayer* fbx_anim_layer, FbxNode* fbx_node)
@@ -334,7 +414,7 @@ ROP_FBXAnimVisitor::exportTRSAnimation(OP_Node* node, FbxAnimLayer* fbx_anim_lay
 	FBXSDK_CURVENODE_COMPONENT_Z
     };
 
-    UT_String node_type = node->getOperator()->getName();
+    UT_StringHolder node_type = node->getOperator()->getName();
     const char *UNIFORM_SCALE = "scale";
     if(node_type == "instance")
     {
